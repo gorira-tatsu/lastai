@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-label="lastai TUI screenshot">
+  <rect width="1440" height="900" fill="#242933"/>
+  <style>
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 17px; fill: #d9dee7; }
+    .dim { fill: #8791a3; }
+    .green { fill: #88c070; }
+    .cyan { fill: #8bd5ca; }
+    .yellow { fill: #e6c76e; }
+    .accent { fill: #111827; }
+    .border { stroke: #d9dee7; stroke-width: 1.5; fill: none; }
+    .selected { fill: #8bd5ca; }
+  </style>
+
+  <rect x="8" y="18" width="1424" height="34" class="border"/>
+  <rect x="13" y="25" width="66" height="20" fill="#9ccfc0"/>
+  <text x="22" y="41" class="accent" font-weight="700">lastai</text>
+  <text x="95" y="41">Codex/Claude history search</text>
+  <text x="386" y="41" class="green">index</text>
+  <text x="448" y="41" class="yellow">42 results</text>
+
+  <rect x="8" y="68" width="1424" height="48" class="border"/>
+  <text x="12" y="76">query [editing]</text>
+  <text x="22" y="103">docker compose</text>
+
+  <rect x="8" y="132" width="590" height="650" class="border"/>
+  <text x="12" y="140">sessions</text>
+
+  <rect x="15" y="154" width="574" height="26" class="selected"/>
+  <text x="23" y="174" class="accent" font-weight="700">06-17 13:17 lastai codex 019ed484</text>
+  <text x="23" y="208">06-17 10:42 web-api claude 7d8f3a29</text>
+  <text x="23" y="236">06-16 22:08 search-core codex 019ecab8</text>
+  <text x="23" y="264">06-16 18:31 docs claude 4f79e5c0</text>
+  <text x="23" y="292">06-15 15:02 nix-config codex 019ec424</text>
+  <text x="23" y="320">06-15 09:48 research-notes claude d2be0fb1</text>
+  <text x="23" y="348">06-14 23:12 backend codex 019ebf70</text>
+  <text x="23" y="376">06-14 17:34 cli-tools claude a17c9ec4</text>
+  <text x="23" y="404">06-13 21:51 ui-prototype codex 019eb981</text>
+  <text x="23" y="432">06-13 11:20 deployment claude 6db9e8a2</text>
+
+  <rect x="606" y="132" width="826" height="650" class="border"/>
+  <text x="610" y="140">preview</text>
+  <text x="624" y="170">2026-06-17 13:17  lastai  codex</text>
+  <text x="624" y="198" class="dim">019ed484-7f62-7751-ab99-64495c656fb2</text>
+  <text x="624" y="226" class="dim">/home/user/code/lastai</text>
+  <text x="624" y="278" class="cyan">[user]</text>
+  <text x="700" y="278">make query input smooth; add debounce</text>
+  <text x="624" y="334" class="green">[assistant]</text>
+  <text x="742" y="334">Implemented debounced search input.</text>
+  <text x="742" y="362">The query line updates immediately, and search runs</text>
+  <text x="742" y="390">after 180ms of idle time.</text>
+  <text x="624" y="446" class="cyan">[user]</text>
+  <text x="700" y="446">remove startup instructions from search results</text>
+  <text x="624" y="502" class="green">[assistant]</text>
+  <text x="742" y="502">Filtered injected AGENTS and environment prelude,</text>
+  <text x="742" y="530">then deduped repeated messages per session.</text>
+  <text x="624" y="586" class="yellow">[tool]</text>
+  <text x="700" y="586">cargo test: 18 passed</text>
+
+  <rect x="8" y="798" width="1424" height="84" class="border"/>
+  <text x="12" y="806">command</text>
+  <text x="22" y="832">profile: <tspan font-weight="700">default</tspan> | backend: index | mode: query | 42 results for `docker compose`</text>
+  <text x="22" y="858">keys: j/k move  / search  e prompt  m backend  d/s/y profile  u update  R rebuild  Enter resume  q quit</text>
+</svg>

@@ -1,0 +1,15 @@
+title = "lastai gitleaks config"
+
+[[allowlists]]
+description = "generated local artifacts"
+paths = [
+  '''^report/''',
+  '''^target/''',
+]
+
+[[allowlists]]
+description = "public lockfile checksums"
+paths = [
+  '''^Cargo\.lock$''',
+  '''^flake\.lock$''',
+]

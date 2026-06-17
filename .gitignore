@@ -1,0 +1,9 @@
+/target/
+/report/
+/result
+/dist/
+.env
+.env.*
+*.log
+.DS_Store
+Cargo.toml.orig
