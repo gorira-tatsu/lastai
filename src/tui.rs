@@ -661,23 +661,20 @@ impl TuiApp {
             self.preview_scroll = 0;
             return;
         };
-        let all_scan_docs = self.backend.scan_mode().and_then(|_| {
-            self.scan_docs
+        let session_docs = match self.backend.scan_mode() {
+            None => index.session_docs(hit.provider, &hit.session_id, usize::MAX),
+            Some(_) => self
+                .scan_docs
                 .as_deref()
                 .map(|docs| session_docs_from_scan(docs, hit.provider, &hit.session_id))
-        });
-        self.conversation = match &all_scan_docs {
-            None => index.session_docs(hit.provider, &hit.session_id, PREVIEW_CONVERSATION_LIMIT),
-            Some(docs) => docs
-                .iter()
-                .take(PREVIEW_CONVERSATION_LIMIT)
-                .cloned()
-                .collect(),
+                .unwrap_or_default(),
         };
-        self.recent_conversation = match all_scan_docs {
-            None => index.session_docs(hit.provider, &hit.session_id, usize::MAX),
-            Some(docs) => docs,
-        };
+        self.conversation = session_docs
+            .iter()
+            .take(PREVIEW_CONVERSATION_LIMIT)
+            .cloned()
+            .collect();
+        self.recent_conversation = session_docs;
         self.preview_scroll = 0;
     }
 
