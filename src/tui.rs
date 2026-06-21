@@ -1078,13 +1078,14 @@ fn push_recent_doc_preview_lines<'a>(lines: &mut Vec<Line<'a>>, doc: &'a Message
         Span::raw("  "),
         Span::raw(doc.source.line_number.to_string()),
     ]));
-    let message_lines = doc.text.lines().collect::<Vec<_>>();
-    for line in message_lines.iter().take(5) {
+    let mut message_lines = doc.text.lines();
+    for line in message_lines.by_ref().take(5) {
         lines.push(Line::from(line.to_string()));
     }
-    if message_lines.len() > 5 {
+    let remaining_lines = message_lines.count();
+    if remaining_lines > 0 {
         lines.push(Line::from(vec![Span::styled(
-            format!("... {} more lines", message_lines.len() - 5),
+            format!("... {remaining_lines} more lines"),
             Style::default().fg(Color::Yellow),
         )]));
     }
