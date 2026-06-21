@@ -6,7 +6,10 @@ use std::{
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+        MouseEvent, MouseEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -31,6 +34,8 @@ const SEARCH_DEBOUNCE: Duration = Duration::from_millis(180);
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(33);
 const PREVIEW_CONVERSATION_LIMIT: usize = 200;
 const PREVIEW_RECENT_MESSAGES: usize = 2;
+const PREVIEW_SCROLL_LINES: usize = 8;
+const PREVIEW_PAGE_SCROLL_LINES: usize = 16;
 
 pub fn run_tui(
     manager: IndexManager,
@@ -44,6 +49,7 @@ pub fn run_tui(
     if use_alt_screen {
         execute!(stdout, EnterAlternateScreen)?;
     }
+    execute!(stdout, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -64,6 +70,7 @@ pub fn run_tui(
     })();
 
     disable_raw_mode()?;
+    execute!(terminal.backend_mut(), DisableMouseCapture)?;
     if use_alt_screen {
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     }
@@ -126,6 +133,7 @@ fn run_loop(
                         }
                     }
                 },
+                Event::Mouse(mouse) => app.handle_mouse(mouse),
                 Event::Resize(_, _) => {}
                 _ => {}
             }
@@ -466,6 +474,12 @@ impl TuiApp {
             },
             (KeyCode::Up, _) => self.move_up(index),
             (KeyCode::Down, _) => self.move_down(index),
+            (KeyCode::PageUp, _) if self.mode == InputMode::Normal => {
+                self.scroll_preview_up(PREVIEW_PAGE_SCROLL_LINES);
+            }
+            (KeyCode::PageDown, _) if self.mode == InputMode::Normal => {
+                self.scroll_preview_down(PREVIEW_PAGE_SCROLL_LINES);
+            }
             (KeyCode::Left, _) => {
                 self.active_editor_mut().map(LineEditor::move_left);
             }
@@ -503,7 +517,7 @@ impl TuiApp {
                 self.active_editor_mut().map(LineEditor::move_end);
             }
             (KeyCode::Char('u'), KeyModifiers::CONTROL) => match self.mode {
-                InputMode::Normal => self.scroll_preview_up(8),
+                InputMode::Normal => self.scroll_preview_up(PREVIEW_SCROLL_LINES),
                 InputMode::Query => {
                     self.query.clear();
                     self.schedule_search();
@@ -519,13 +533,13 @@ impl TuiApp {
                 InputMode::Prompt => self.prompt.delete_word_before_cursor(),
             },
             (KeyCode::Char('d'), KeyModifiers::CONTROL) if self.mode == InputMode::Normal => {
-                self.scroll_preview_down(8);
+                self.scroll_preview_down(PREVIEW_SCROLL_LINES);
             }
             (KeyCode::Char('f'), KeyModifiers::CONTROL) if self.mode == InputMode::Normal => {
-                self.scroll_preview_down(16);
+                self.scroll_preview_down(PREVIEW_PAGE_SCROLL_LINES);
             }
             (KeyCode::Char('b'), KeyModifiers::CONTROL) if self.mode == InputMode::Normal => {
-                self.scroll_preview_up(16);
+                self.scroll_preview_up(PREVIEW_PAGE_SCROLL_LINES);
             }
             (KeyCode::Char(ch), KeyModifiers::NONE) | (KeyCode::Char(ch), KeyModifiers::SHIFT) => {
                 return self.handle_char(ch, index);
@@ -541,6 +555,17 @@ impl TuiApp {
             _ => {}
         }
         Ok(TuiControl::Continue)
+    }
+
+    fn handle_mouse(&mut self, mouse: MouseEvent) {
+        if self.mode != InputMode::Normal {
+            return;
+        }
+        match mouse.kind {
+            MouseEventKind::ScrollDown => self.scroll_preview_down(PREVIEW_SCROLL_LINES),
+            MouseEventKind::ScrollUp => self.scroll_preview_up(PREVIEW_SCROLL_LINES),
+            _ => {}
+        }
     }
 
     fn handle_char(&mut self, ch: char, index: &mut SearchIndex) -> Result<TuiControl> {

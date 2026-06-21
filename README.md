@@ -23,16 +23,23 @@ Tantivy is intentionally not used in v1.
 
 ## Install
 
-From a local checkout:
+From a tagged release, use the generated shell installer:
 
 ```sh
-cargo install --path .
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/gorira-tatsu/lastai/releases/latest/download/lastai-installer.sh | sh
 ```
 
-From GitHub:
+With Cargo, from GitHub:
 
 ```sh
 cargo install --git https://github.com/gorira-tatsu/lastai
+```
+
+With Cargo, from a local checkout:
+
+```sh
+cargo install --path .
 ```
 
 With Nix:
@@ -41,8 +48,15 @@ With Nix:
 nix run github:gorira-tatsu/lastai
 ```
 
-Release builds are intended to be produced with `cargo-dist`, including a
-Homebrew formula once tagged releases are published.
+After tagged releases are published, Homebrew installation is available from
+the generated release formula:
+
+```sh
+brew install --formula ./lastai.rb
+```
+
+Release builds are produced with `cargo-dist`, including shell installer and
+Homebrew formula artifacts.
 
 ## Quick Start
 
@@ -120,6 +134,7 @@ lastai search 'docker.*compose' --backend regex
 - `u`: update the index
 - `R`: rebuild the index
 - `Ctrl-D` / `Ctrl-U`: scroll the conversation preview down/up in normal mode
+- `Ctrl-F` / `Ctrl-B`, `PageDown` / `PageUp`, or mouse wheel: page the preview
 - `Enter`: resume selected session
 - `Esc`: leave input mode; quit from normal mode
 - `q`: quit from normal mode
