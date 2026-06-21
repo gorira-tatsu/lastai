@@ -24,11 +24,13 @@ use crate::{
     index::{IndexManager, SearchIndex},
     resume::{CommandSpec, build_resume_command, run_command},
     scan::{ScanMode, load_scan_docs, search_docs},
-    types::{MessageDoc, SearchOptions, SessionHit},
+    types::{MessageDoc, Role, SearchOptions, SessionHit},
 };
 
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(180);
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(33);
+const PREVIEW_CONVERSATION_LIMIT: usize = 200;
+const PREVIEW_RECENT_MESSAGES: usize = 2;
 
 pub fn run_tui(
     manager: IndexManager,
@@ -152,6 +154,7 @@ struct TuiApp {
     scan_docs: Option<Vec<MessageDoc>>,
     results: Vec<SessionHit>,
     conversation: Vec<MessageDoc>,
+    recent_conversation: Vec<MessageDoc>,
     preview_scroll: usize,
     selected: usize,
     profile: String,
@@ -316,6 +319,7 @@ impl TuiApp {
             scan_docs: None,
             results: Vec::new(),
             conversation: Vec::new(),
+            recent_conversation: Vec::new(),
             preview_scroll: 0,
             selected: 0,
             profile: "default".to_string(),
@@ -350,6 +354,7 @@ impl TuiApp {
                 if self.query.is_empty() {
                     self.results.clear();
                     self.conversation.clear();
+                    self.recent_conversation.clear();
                     self.status =
                         "scan backend idle: type / to search, or press R to build the index"
                             .to_string();
@@ -652,27 +657,27 @@ impl TuiApp {
     fn update_conversation(&mut self, index: &SearchIndex) {
         let Some(hit) = self.results.get(self.selected) else {
             self.conversation.clear();
+            self.recent_conversation.clear();
             self.preview_scroll = 0;
             return;
         };
-        self.conversation = match self.backend.scan_mode() {
-            None => index.session_docs(hit.provider, &hit.session_id, 200),
-            Some(_) => self
-                .scan_docs
+        let all_scan_docs = self.backend.scan_mode().and_then(|_| {
+            self.scan_docs
                 .as_deref()
-                .unwrap_or(&[])
+                .map(|docs| session_docs_from_scan(docs, hit.provider, &hit.session_id))
+        });
+        self.conversation = match &all_scan_docs {
+            None => index.session_docs(hit.provider, &hit.session_id, PREVIEW_CONVERSATION_LIMIT),
+            Some(docs) => docs
                 .iter()
-                .filter(|doc| doc.provider == hit.provider && doc.session_id == hit.session_id)
-                .take(200)
+                .take(PREVIEW_CONVERSATION_LIMIT)
                 .cloned()
                 .collect(),
         };
-        self.conversation.sort_by(|a, b| {
-            a.timestamp
-                .cmp(&b.timestamp)
-                .then_with(|| a.source.path.cmp(&b.source.path))
-                .then_with(|| a.source.line_number.cmp(&b.source.line_number))
-        });
+        self.recent_conversation = match all_scan_docs {
+            None => index.session_docs(hit.provider, &hit.session_id, usize::MAX),
+            Some(docs) => docs,
+        };
         self.preview_scroll = 0;
     }
 
@@ -790,11 +795,7 @@ impl TuiApp {
             );
         frame.render_stateful_widget(list, body[0], &mut state);
 
-        let preview = self.preview_lines();
-        let preview = Paragraph::new(preview)
-            .block(Block::default().title("preview").borders(Borders::ALL))
-            .wrap(Wrap { trim: false });
-        frame.render_widget(preview, body[1]);
+        self.render_preview(frame, body[1]);
 
         let footer_text = vec![
             Line::from(vec![
@@ -853,6 +854,58 @@ impl TuiApp {
         ]);
         let header = Paragraph::new(title).block(Block::default().borders(Borders::ALL));
         frame.render_widget(header, area);
+    }
+
+    fn render_preview(&self, frame: &mut ratatui::Frame<'_>, area: Rect) {
+        let block = Block::default().title("preview").borders(Borders::ALL);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        let recent_lines = self.recent_preview_lines();
+        let recent_height = if recent_lines.is_empty() {
+            0
+        } else {
+            (recent_lines.len() as u16).min(inner.height)
+        };
+
+        if recent_height == 0 {
+            let preview = Paragraph::new(self.preview_lines()).wrap(Wrap { trim: false });
+            frame.render_widget(preview, inner);
+            return;
+        }
+
+        let separator_height = u16::from(inner.height > recent_height);
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(recent_height),
+                Constraint::Length(separator_height),
+                Constraint::Min(0),
+            ])
+            .split(inner);
+        let recent_line_count = recent_lines.len();
+        let mut visible_recent_lines = recent_lines
+            .into_iter()
+            .take(recent_height as usize)
+            .collect::<Vec<_>>();
+        if recent_line_count > recent_height as usize
+            && let Some(last) = visible_recent_lines.last_mut()
+        {
+            *last = Line::from(vec![Span::styled(
+                "... recent messages truncated by window height",
+                Style::default().fg(Color::Yellow),
+            )]);
+        }
+        let recent = Paragraph::new(visible_recent_lines).wrap(Wrap { trim: false });
+        frame.render_widget(recent, chunks[0]);
+
+        if separator_height > 0 {
+            let separator = Paragraph::new("-".repeat(chunks[1].width as usize));
+            frame.render_widget(separator, chunks[1]);
+        }
+
+        let preview = Paragraph::new(self.preview_lines()).wrap(Wrap { trim: false });
+        frame.render_widget(preview, chunks[2]);
     }
 
     fn render_cursor(&self, frame: &mut ratatui::Frame<'_>, query_area: Rect, footer_area: Rect) {
@@ -934,33 +987,111 @@ impl TuiApp {
         )));
         lines.push(Line::from(""));
         for doc in &self.conversation {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("[{}]", doc.role),
-                    Style::default().fg(match doc.role.as_str() {
-                        "user" => Color::Cyan,
-                        "assistant" => Color::Green,
-                        "tool" => Color::Yellow,
-                        "system" => Color::Magenta,
-                        _ => Color::Gray,
-                    }),
-                ),
-                Span::raw(" "),
-                Span::raw(
-                    doc.timestamp
-                        .map(|ts| ts.format("%Y-%m-%d %H:%M").to_string())
-                        .unwrap_or_default(),
-                ),
-                Span::raw("  "),
-                Span::raw(doc.source.line_number.to_string()),
-            ]));
-            for line in doc.text.lines().take(16) {
-                lines.push(Line::from(line.to_string()));
-            }
-            lines.push(Line::from(""));
+            push_doc_preview_lines(&mut lines, doc);
         }
         lines.into_iter().skip(self.preview_scroll).collect()
     }
+
+    fn recent_preview_lines(&self) -> Vec<Line<'_>> {
+        let recent = self
+            .recent_conversation
+            .iter()
+            .filter(|doc| doc.role == Role::User)
+            .rev()
+            .take(PREVIEW_RECENT_MESSAGES)
+            .collect::<Vec<_>>();
+        if recent.is_empty() {
+            return Vec::new();
+        }
+        let mut lines = vec![
+            Line::from(vec![Span::styled(
+                "recent messages",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+        ];
+        for doc in recent.into_iter().rev() {
+            push_recent_doc_preview_lines(&mut lines, doc);
+        }
+        lines
+    }
+}
+
+fn session_docs_from_scan(
+    docs: &[MessageDoc],
+    provider: crate::types::Provider,
+    session_id: &str,
+) -> Vec<MessageDoc> {
+    let mut docs = docs
+        .iter()
+        .filter(|doc| doc.provider == provider && doc.session_id == session_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    sort_preview_docs(&mut docs);
+    docs
+}
+
+fn sort_preview_docs(docs: &mut [MessageDoc]) {
+    docs.sort_by(|a, b| {
+        a.timestamp
+            .cmp(&b.timestamp)
+            .then_with(|| a.source.path.cmp(&b.source.path))
+            .then_with(|| a.source.line_number.cmp(&b.source.line_number))
+    });
+}
+
+fn push_doc_preview_lines<'a>(lines: &mut Vec<Line<'a>>, doc: &'a MessageDoc) {
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!("[{}]", doc.role),
+            Style::default().fg(match doc.role.as_str() {
+                "user" => Color::Cyan,
+                "assistant" => Color::Green,
+                "tool" => Color::Yellow,
+                "system" => Color::Magenta,
+                _ => Color::Gray,
+            }),
+        ),
+        Span::raw(" "),
+        Span::raw(
+            doc.timestamp
+                .map(|ts| ts.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_default(),
+        ),
+        Span::raw("  "),
+        Span::raw(doc.source.line_number.to_string()),
+    ]));
+    for line in doc.text.lines().take(16) {
+        lines.push(Line::from(line.to_string()));
+    }
+    lines.push(Line::from(""));
+}
+
+fn push_recent_doc_preview_lines<'a>(lines: &mut Vec<Line<'a>>, doc: &'a MessageDoc) {
+    lines.push(Line::from(vec![
+        Span::styled("[user]", Style::default().fg(Color::Cyan)),
+        Span::raw(" "),
+        Span::raw(
+            doc.timestamp
+                .map(|ts| ts.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_default(),
+        ),
+        Span::raw("  "),
+        Span::raw(doc.source.line_number.to_string()),
+    ]));
+    let message_lines = doc.text.lines().collect::<Vec<_>>();
+    for line in message_lines.iter().take(5) {
+        lines.push(Line::from(line.to_string()));
+    }
+    if message_lines.len() > 5 {
+        lines.push(Line::from(vec![Span::styled(
+            format!("... {} more lines", message_lines.len() - 5),
+            Style::default().fg(Color::Yellow),
+        )]));
+    }
+    lines.push(Line::from(""));
 }
 
 fn short_id(session_id: &str) -> String {
